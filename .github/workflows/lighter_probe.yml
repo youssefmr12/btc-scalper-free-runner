@@ -12,53 +12,44 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install
-        run: pip install "lighter-data"
-      - name: Resolve BTC market and inspect remote files
+        with: {python-version: "3.11"}
+      - run: pip install "lighter-data"
+      - name: Probe sizes and cadence
         shell: bash
         run: |
           python -u - <<'PY'
-          import urllib.request
+          import urllib.request,zlib,csv,io
           from lighter_data.rest import ticker_to_id
-          mid=ticker_to_id()["BTC"]
-          print("BTC_MARKET_ID", mid, flush=True)
+          mid=ticker_to_id()["BTC"]; print("BTC_MARKET_ID",mid,flush=True)
           base="https://datasets.tardis.dev/v1/lighter"
           for typ in ("book_snapshot_25","trades"):
               u=f"{base}/{typ}/2026/10/01/{mid}.csv.gz"
-              req=urllib.request.Request(u, method="HEAD")
-              try:
-                  with urllib.request.urlopen(req, timeout=30) as r:
-                      print("HEAD",typ,"status",r.status,"length",r.headers.get("Content-Length"),
-                            "accept_ranges",r.headers.get("Accept-Ranges"),"etag",r.headers.get("ETag"),flush=True)
-              except Exception as e:
-                  print("HEAD_FAIL",typ,repr(e),flush=True)
-          PY
-
-      - name: Stream first 64 MiB of book with progress
-        shell: bash
-        run: |
-          python -u - <<'PY'
-          import urllib.request, time
-          from lighter_data.rest import ticker_to_id
-          mid=ticker_to_id()["BTC"]
-          u=f"https://datasets.tardis.dev/v1/lighter/book_snapshot_25/2026/10/01/{mid}.csv.gz"
-          req=urllib.request.Request(u, headers={"Range":"bytes=0-67108863"})
-          total=0; t0=time.time()
-          with urllib.request.urlopen(req, timeout=120) as r:
-              print("GET_STATUS",r.status,"CONTENT_LENGTH",r.headers.get("Content-Length"),
-                    "CONTENT_RANGE",r.headers.get("Content-Range"),flush=True)
-              while True:
-                  b=r.read(1024*1024)
-                  if not b: break
-                  total+=len(b)
-                  if total%(8*1024*1024)<1024*1024:
-                      print("PROGRESS_MIB",round(total/1048576,1),"elapsed_s",round(time.time()-t0,1),flush=True)
-                  if total>=64*1024*1024: break
-          print("READ_MIB",round(total/1048576,2),"elapsed_s",round(time.time()-t0,2),flush=True)
+              req=urllib.request.Request(u,headers={"Range":"bytes=0-8388607"})
+              with urllib.request.urlopen(req,timeout=60) as r:
+                  print("REMOTE",typ,"status",r.status,"range",r.headers.get("Content-Range"),
+                        "length",r.headers.get("Content-Length"),flush=True)
+                  raw=r.read()
+              d=zlib.decompressobj(16+zlib.MAX_WBITS)
+              txt=d.decompress(raw).decode("utf-8","ignore")
+              lines=txt.splitlines()
+              print("DECOMPRESSED_LINES",typ,len(lines),flush=True)
+              if lines:
+                  reader=csv.reader(lines)
+                  header=next(reader); print("HEADER",typ,header[:18],flush=True)
+                  ti=header.index("timestamp")
+                  vals=[]
+                  for i,row in enumerate(reader):
+                      if len(row)<=ti: continue
+                      vals.append(int(row[ti]))
+                      if len(vals)>=200: break
+                  if vals:
+                      ds=[(b-a)/1000 for a,b in zip(vals,vals[1:])]
+                      print("TS_FIRST_LAST",typ,vals[0],vals[-1],"N",len(vals),
+                            "DELTA_MS_MIN",min(ds) if ds else None,
+                            "MED",sorted(ds)[len(ds)//2] if ds else None,
+                            "MAX",max(ds) if ds else None,flush=True)
           PY
