@@ -1,0 +1,33 @@
+name: Inspect Recovered V190 Package
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/inspect_recovered.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout private package
+        uses: actions/checkout@v4
+        with:
+          repository: youssefmr12/forma-body-os
+          ref: btc-scalper-v190-actions
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: false
+      - name: Inspect recovered bundle
+        shell: bash
+        run: |
+          base64 -d private/btc_scalper_v190/recovered_v190_replay.b64 > /tmp/recovered.zip
+          echo "BYTES=$(wc -c </tmp/recovered.zip)"
+          sha256sum /tmp/recovered.zip
+          unzip -t /tmp/recovered.zip
+          unzip -l /tmp/recovered.zip
