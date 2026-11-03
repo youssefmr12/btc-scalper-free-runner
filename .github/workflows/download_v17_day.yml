@@ -1,0 +1,27 @@
+name: Download V1.7 Reference Day Data
+on:
+  push:
+    branches: [main]
+    paths:
+      - "download_v17_day.py"
+      - ".github/workflows/download_v17_day.yml"
+permissions:
+  contents: read
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests
+      - run: python -u download_v17_day.py
+      - run: ls -lh v17_day && gzip -t v17_day/*.csv.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v17-bybit-2026-09-01
+          path: v17_day/
+          compression-level: 0
+          retention-days: 1
