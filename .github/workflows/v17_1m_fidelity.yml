@@ -1,0 +1,38 @@
+name: V1.7 1m Fidelity Gate
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/v17_1m_fidelity.yml']
+permissions:
+  contents: read
+jobs:
+  fidelity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout private replay branch
+        uses: actions/checkout@v4
+        with:
+          repository: youssefmr12/forma-body-os
+          ref: btc-scalper-v17-1m-feasibility
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install PyYAML
+      - name: Compile
+        run: |
+          python -m py_compile private/btc_scalper_v17_1m/v17_1m_replay.py
+          python -m py_compile private/btc_scalper_v190/recovered_sources/signal_engine.py
+      - name: Run 2026-09-01 fidelity
+        run: |
+          python -u private/btc_scalper_v17_1m/v17_1m_replay.py --date 2026-09-01 --data-dir data_v17 --out v17_1m_fidelity.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v17-1m-fidelity
+          path: v17_1m_fidelity.json
+          if-no-files-found: warn
