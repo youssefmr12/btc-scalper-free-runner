@@ -1,0 +1,23 @@
+name: Paradex BTC Execution Probe
+on:
+  push:
+    branches: [main]
+    paths: ['paradex_probe.py','.github/workflows/paradex_probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: pip install requests
+      - run: python paradex_probe.py
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paradex-probe
+          path: paradex_probe.json
+          if-no-files-found: warn
