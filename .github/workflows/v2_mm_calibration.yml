@@ -1,0 +1,45 @@
+name: V2 Signal-Skew MM Calibration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/v2_mm_calibration.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  calibrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout private V2 branch
+        uses: actions/checkout@v4
+        with:
+          repository: youssefmr12/forma-body-os
+          ref: btc-scalper-v2-signal-skew-mm
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pytest requests
+      - name: Compile and unit test
+        run: |
+          cd private/btc_scalper_v2_mm
+          python -m py_compile signal_skew_mm.py v17_jsonl_adapter.py grvt_shadow_calibration.py
+          python -m pytest -q
+      - name: Run no-order GRVT execution calibration
+        run: |
+          cd private/btc_scalper_v2_mm
+          python -u grvt_shadow_calibration.py --duration-s 90 --poll-s 0.25 --ttl-ms 1200 --out grvt_mm_calibration.json
+          cat grvt_mm_calibration.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2-mm-calibration
+          path: private/btc_scalper_v2_mm/grvt_mm_calibration.json
+          if-no-files-found: warn
