@@ -1,0 +1,65 @@
+name: V1.7 TurboFlow Direct Bybit 2026-10-21
+on:
+  push:
+    branches: [main]
+    paths:
+      - "v17_turboflow_direct.py"
+      - ".github/workflows/v17_turboflow_direct.yml"
+permissions:
+  contents: read
+jobs:
+  replay:
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        date: ["2026-09-01","2026-10-21"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout private strategy
+        uses: actions/checkout@v4
+        with:
+          repository: youssefmr12/forma-body-os
+          ref: btc-scalper-v17-1m-feasibility
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install PyYAML
+      - name: Direct public replay
+        run: |
+          mkdir -p result
+          python -u v17_turboflow_direct.py --date "${{ matrix.date }}" --private-root private --out "result/${{ matrix.date }}.json"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: direct-v17-${{ matrix.date }}
+          path: result/*.json
+          if-no-files-found: warn
+          retention-days: 1
+  aggregate:
+    needs: replay
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: direct-v17-*
+          path: all_results
+          merge-multiple: true
+      - name: Aggregate
+        run: |
+          python -u v17_turboflow_econ.py --aggregate all_results --out FINAL_V17_TURBOFLOW_DIRECT_2026-10-21.json
+          cat FINAL_V17_TURBOFLOW_DIRECT_2026-10-21.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: direct-v17-final
+          path: FINAL_V17_TURBOFLOW_DIRECT_2026-10-21.json
+          if-no-files-found: warn
+          retention-days: 1
