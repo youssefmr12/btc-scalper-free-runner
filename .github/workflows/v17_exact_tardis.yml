@@ -1,0 +1,60 @@
+name: V1.7 Exact Tardis Fidelity + 2026-10-01
+on:
+  push:
+    branches: [v17-exact-oct1]
+    paths:
+      - "v17_exact_tardis_runner.py"
+      - ".github/workflows/v17_exact_tardis.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  replay:
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        date: ["2026-09-01","2026-10-01"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout private exact bundle
+        uses: actions/checkout@v4
+        with:
+          repository: youssefmr12/forma-body-os
+          ref: btc-v17-turboflow-oct1-replay
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Decode exact engine bundle
+        run: |
+          mkdir -p work result
+          python - <<'PY'
+          import base64,gzip,pathlib
+          src=pathlib.Path("private/tmp_v17_replay/v17_oct1_turboflow_combined.py.gz.b64")
+          dst=pathlib.Path("work/v17_exact_private.py")
+          dst.write_bytes(gzip.decompress(base64.b64decode(src.read_text().strip())))
+          print("decoded", dst.stat().st_size)
+          PY
+      - run: pip install PyYAML
+      - name: Exact Tardis replay
+        run: python -u v17_exact_tardis_runner.py --date "${{ matrix.date }}" --private-root private --out "result/${{ matrix.date }}.json"
+      - name: Print compact result
+        if: always()
+        run: |
+          python - <<'PY'
+          import glob,json
+          for f in glob.glob("result/*.json"):
+              x=json.load(open(f)); x.pop("trades",None); print(json.dumps(x))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v17-exact-tardis-${{ matrix.date }}
+          path: result/*.json
+          if-no-files-found: warn
+          retention-days: 1
