@@ -1,0 +1,43 @@
+name: BTC V187 Baseline Fidelity
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/fidelity.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  fidelity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout private recovered sources
+        uses: actions/checkout@v4
+        with:
+          repository: youssefmr12/forma-body-os
+          ref: btc-scalper-v190-actions
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install PyYAML
+      - name: Run V1.8.7 baseline fidelity with risk + execution gates
+        run: |
+          python -u private/btc_scalper_v190/recovered_sources/replay_reconstructed_v190_fidelity.py \
+            --date "2026-10-01" \
+            --data-dir data_fidelity \
+            --out fidelity_result.json \
+            --fidelity-only
+          cat fidelity_result.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: btc-v187-fidelity-result
+          path: fidelity_result.json
+          if-no-files-found: warn
