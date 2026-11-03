@@ -1,0 +1,59 @@
+name: Recover V185 Source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/recover_v185.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout private package
+        uses: actions/checkout@v4
+        with:
+          repository: youssefmr12/forma-body-os
+          ref: btc-scalper-v190-actions
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: false
+      - name: Recover exact V185 source
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import struct,zlib,binascii
+          src=Path("private/btc_scalper_v190/v190_ab_package.zip")
+          b=src.read_bytes(); sig=b"PK\x03\x04"; p=0
+          while True:
+              p=b.find(sig,p)
+              if p<0: break
+              _,ver,flags,method,mt,md,crc,csize,usize,fnlen,exlen=struct.unpack_from("<IHHHHHIIIHH",b,p)
+              n0=p+30; n1=n0+fnlen; d0=n1+exlen
+              name=b[n0:n1].decode("utf-8","replace")
+              if name=="edge_quality_v185.py":
+                  d=zlib.decompressobj(-15)
+                  raw=d.decompress(b[d0:])+d.flush()
+                  assert d.eof
+                  assert len(raw)==usize
+                  assert (binascii.crc32(raw)&0xffffffff)==crc
+                  Path("edge_quality_v185.py").write_bytes(raw)
+                  print("RECOVERED",name,len(raw),f"{crc:08x}")
+                  break
+              p+=4
+          else:
+              raise SystemExit("V185 not found")
+          PY
+          python -m py_compile edge_quality_v185.py
+      - name: Upload exact recovered V185
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-edge-quality-v185
+          path: edge_quality_v185.py
+          if-no-files-found: error
