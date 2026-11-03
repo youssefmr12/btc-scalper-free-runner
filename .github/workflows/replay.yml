@@ -55,8 +55,7 @@ jobs:
           python -u private/btc_scalper_v190/recovered_sources/replay_reconstructed_v190.py \
             --date "${{ steps.req.outputs.date }}" \
             --out ab_result.json \
-            --data-dir data_raw \
-            --fidelity-only
+            --data-dir data_raw
           cat ab_result.json
 
       - name: Upload result
