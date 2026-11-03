@@ -1,0 +1,33 @@
+name: Aggregate Exact V1.7 Oct1
+on:
+  push:
+    branches: [v17-exact-oct1]
+    paths:
+      - "aggregate_exact_oct1.py"
+      - ".github/workflows/aggregate_exact_oct1.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  aggregate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: youssefmr12/btc-scalper-free-runner
+          run-id: 41740266654
+          pattern: v17-exact-tardis-*
+          path: exact_artifacts
+          merge-multiple: true
+      - run: python aggregate_exact_oct1.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-v17-oct1-final
+          path: FINAL_V17_EXACT_TURBOFLOW_2026-10-01.json
+          retention-days: 1
