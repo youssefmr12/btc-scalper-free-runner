@@ -51,9 +51,12 @@ jobs:
 
       - name: Prepare recovered replay
         run: |
-          rm -rf recovered
+          rm -rf recovered recovered_v190_replay.zip
           mkdir -p recovered
-          unzip -q private/btc_scalper_v190/recovered_v190_replay.zip -d recovered
+          base64 -d private/btc_scalper_v190/recovered_v190_replay.b64 > recovered_v190_replay.zip
+          echo "ZIP_SHA256=$(sha256sum recovered_v190_replay.zip | awk '{print $1}')"
+          unzip -t recovered_v190_replay.zip
+          unzip -q recovered_v190_replay.zip -d recovered
           python -m py_compile recovered/*.py
 
       - name: Run historical deterministic replay
