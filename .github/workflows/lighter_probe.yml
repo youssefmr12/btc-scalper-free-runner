@@ -1,11 +1,10 @@
-name: Lighter BTC Data Probe
+name: Lighter BTC Streaming Probe
 
 on:
   push:
     branches: [main]
     paths:
       - ".github/workflows/lighter_probe.yml"
-      - "request.json"
 
 permissions:
   contents: read
@@ -20,19 +19,46 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install
-        run: pip install "lighter-data" pyarrow
-      - name: Download and inspect
+        run: pip install "lighter-data"
+      - name: Resolve BTC market and inspect remote files
         shell: bash
         run: |
-          DATE=$(jq -r '.date' request.json)
-          lighter-data tardis --coins BTC --dates "$DATE" --root data
-          python - <<'PY'
-          from pathlib import Path
-          import pyarrow.parquet as pq
-          for p in sorted(Path("data").rglob("*.parquet")):
-              pf=pq.ParquetFile(p)
-              print("FILE",p,"ROWS",pf.metadata.num_rows)
-              print("SCHEMA",pf.schema_arrow)
-              t=pf.read_row_group(0).slice(0,3).to_pylist()
-              print("SAMPLE",t)
+          python -u - <<'PY'
+          import urllib.request
+          from lighter_data.rest import ticker_to_id
+          mid=ticker_to_id()["BTC"]
+          print("BTC_MARKET_ID", mid, flush=True)
+          base="https://datasets.tardis.dev/v1/lighter"
+          for typ in ("book_snapshot_25","trades"):
+              u=f"{base}/{typ}/2026/10/01/{mid}.csv.gz"
+              req=urllib.request.Request(u, method="HEAD")
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as r:
+                      print("HEAD",typ,"status",r.status,"length",r.headers.get("Content-Length"),
+                            "accept_ranges",r.headers.get("Accept-Ranges"),"etag",r.headers.get("ETag"),flush=True)
+              except Exception as e:
+                  print("HEAD_FAIL",typ,repr(e),flush=True)
+          PY
+
+      - name: Stream first 64 MiB of book with progress
+        shell: bash
+        run: |
+          python -u - <<'PY'
+          import urllib.request, time
+          from lighter_data.rest import ticker_to_id
+          mid=ticker_to_id()["BTC"]
+          u=f"https://datasets.tardis.dev/v1/lighter/book_snapshot_25/2026/10/01/{mid}.csv.gz"
+          req=urllib.request.Request(u, headers={"Range":"bytes=0-67108863"})
+          total=0; t0=time.time()
+          with urllib.request.urlopen(req, timeout=120) as r:
+              print("GET_STATUS",r.status,"CONTENT_LENGTH",r.headers.get("Content-Length"),
+                    "CONTENT_RANGE",r.headers.get("Content-Range"),flush=True)
+              while True:
+                  b=r.read(1024*1024)
+                  if not b: break
+                  total+=len(b)
+                  if total%(8*1024*1024)<1024*1024:
+                      print("PROGRESS_MIB",round(total/1048576,1),"elapsed_s",round(time.time()-t0,1),flush=True)
+                  if total>=64*1024*1024: break
+          print("READ_MIB",round(total/1048576,2),"elapsed_s",round(time.time()-t0,2),flush=True)
           PY
