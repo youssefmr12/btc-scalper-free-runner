@@ -1,55 +1,23 @@
-name: Lighter BTC Streaming Probe
-
+name: Lighter BTC Execution Probe
 on:
   push:
     branches: [main]
-    paths:
-      - ".github/workflows/lighter_probe.yml"
-
+    paths: ['lighter_probe.py','.github/workflows/lighter_probe.yml']
 permissions:
   contents: read
-
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.11"}
-      - run: pip install "lighter-data"
-      - name: Probe sizes and cadence
-        shell: bash
-        run: |
-          python -u - <<'PY'
-          import urllib.request,zlib,csv,io
-          from lighter_data.rest import ticker_to_id
-          mid=ticker_to_id()["BTC"]; print("BTC_MARKET_ID",mid,flush=True)
-          base="https://datasets.tardis.dev/v1/lighter"
-          for typ in ("book_snapshot_25","trades"):
-              u=f"{base}/{typ}/2026/10/01/{mid}.csv.gz"
-              req=urllib.request.Request(u,headers={"Range":"bytes=0-8388607"})
-              with urllib.request.urlopen(req,timeout=60) as r:
-                  print("REMOTE",typ,"status",r.status,"range",r.headers.get("Content-Range"),
-                        "length",r.headers.get("Content-Length"),flush=True)
-                  raw=r.read()
-              d=zlib.decompressobj(16+zlib.MAX_WBITS)
-              txt=d.decompress(raw).decode("utf-8","ignore")
-              lines=txt.splitlines()
-              print("DECOMPRESSED_LINES",typ,len(lines),flush=True)
-              if lines:
-                  reader=csv.reader(lines)
-                  header=next(reader); print("HEADER",typ,header[:18],flush=True)
-                  ti=header.index("timestamp")
-                  vals=[]
-                  for i,row in enumerate(reader):
-                      if len(row)<=ti: continue
-                      vals.append(int(row[ti]))
-                      if len(vals)>=200: break
-                  if vals:
-                      ds=[(b-a)/1000 for a,b in zip(vals,vals[1:])]
-                      print("TS_FIRST_LAST",typ,vals[0],vals[-1],"N",len(vals),
-                            "DELTA_MS_MIN",min(ds) if ds else None,
-                            "MED",sorted(ds)[len(ds)//2] if ds else None,
-                            "MAX",max(ds) if ds else None,flush=True)
-          PY
+        with: {python-version: '3.11'}
+      - run: pip install requests
+      - run: python lighter_probe.py
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighter-probe
+          path: lighter_probe.json
+          if-no-files-found: warn
