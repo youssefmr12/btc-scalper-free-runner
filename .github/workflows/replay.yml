@@ -27,8 +27,10 @@ jobs:
           EQUITY=$(jq -r '.start_equity' request.json)
           echo "date=$DATE" >> "$GITHUB_OUTPUT"
           echo "equity=$EQUITY" >> "$GITHUB_OUTPUT"
+          echo "Historical replay date: $DATE"
+          echo "Starting equity: $EQUITY"
 
-      - name: Checkout private benchmark package
+      - name: Checkout private replay package
         uses: actions/checkout@v4
         with:
           repository: youssefmr12/forma-body-os
@@ -45,123 +47,24 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install "lighter-data" pyarrow PyYAML
+          pip install PyYAML
 
-      - name: Recover benchmark files from damaged ZIP
-        shell: bash
+      - name: Prepare recovered replay
         run: |
-          set -e
-          mkdir -p v190
-          python - <<'PY'
-          from pathlib import Path
-          import struct, zlib, binascii
+          rm -rf recovered
+          mkdir -p recovered
+          unzip -q private/btc_scalper_v190/recovered_v190_replay.zip -d recovered
+          python -m py_compile recovered/*.py
 
-          src = Path("private/btc_scalper_v190/v190_ab_package.zip")
-          out = Path("v190")
-          import zipfile
-          try:
-              with zipfile.ZipFile(src) as zf:
-                  for zi in zf.infolist():
-                      print("CENTRAL", zi.filename, "size", zi.file_size, "csize", zi.compress_size, "crc", f"{zi.CRC:08x}", "offset", zi.header_offset)
-          except Exception as e:
-              print("CENTRAL_READ_FAIL", repr(e))
-          b = src.read_bytes()
-          sig = b"PK\x03\x04"
-          positions = []
-          p = 0
-          while True:
-              p = b.find(sig, p)
-              if p < 0:
-                  break
-              positions.append(p)
-              p += 4
-
-          print("LOCAL_HEADERS", len(positions), positions)
-          recovered = []
-          for pos in positions:
-              try:
-                  if pos + 30 > len(b):
-                      continue
-                  fields = struct.unpack_from("<IHHHHHIIIHH", b, pos)
-                  _, ver, flags, method, mt, md, crc, csize, usize, fnlen, exlen = fields
-                  name0 = pos + 30
-                  name1 = name0 + fnlen
-                  data0 = name1 + exlen
-                  name = b[name0:name1].decode("utf-8", "replace")
-                  if not name or "/" in name or "\\" in name:
-                      continue
-
-                  tail = b[data0:]
-                  raw = None
-                  consumed = None
-
-                  if method == 0:
-                      if csize <= len(tail):
-                          raw = tail[:csize]
-                          consumed = csize
-                  elif method == 8:
-                      d = zlib.decompressobj(-15)
-                      try:
-                          raw = d.decompress(tail) + d.flush()
-                          if d.eof:
-                              consumed = len(tail) - len(d.unused_data)
-                          else:
-                              raw = None
-                      except zlib.error as e:
-                          print("DEFLATE_FAIL", name, repr(e))
-                          raw = None
-                  else:
-                      print("UNSUPPORTED_METHOD", name, method)
-                      continue
-
-                  if raw is None:
-                      print("FAILED", name, "at", pos, "method", method, "csize", csize, "usize", usize)
-                      continue
-
-                  crc_actual = binascii.crc32(raw) & 0xffffffff
-                  status = "CRC_OK" if crc_actual == crc else f"CRC_MISMATCH expected={crc:08x} got={crc_actual:08x}"
-                  print("RECOVERED", name, "offset", pos, "bytes", len(raw), "consumed", consumed, status)
-                  (out / name).write_bytes(raw)
-                  recovered.append(name)
-              except Exception as e:
-                  print("HEADER_FAIL", pos, repr(e))
-
-          print("RECOVERED_FILES", sorted(recovered))
-          required = {
-              "risk_manager.py",
-              "edge_quality_v185.py",
-              "confirmed_move_compounder_v190.py",
-              "capital_risk_engine.py",
-              "config.yaml",
-              "replay_compare_v190.py",
-              "edge_quality_v187.py",
-              "execution_shield.py",
-              "signal_engine.py",
-          }
-          missing = sorted(required - set(recovered))
-          print("MISSING_REQUIRED", missing)
-          if missing:
-              raise SystemExit("missing required recovered files: " + ", ".join(missing))
-          PY
-          find v190 -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
-          python -m py_compile v190/*.py
-
-      - name: Download historical BTC data
+      - name: Run historical deterministic replay
         run: |
-          lighter-data tardis --coins BTC --dates "${{ steps.req.outputs.date }}" --root data
-          echo "PARQUET_COUNT=$(find data -type f -name '*.parquet' | wc -l)"
-          find data -type f -name '*.parquet' -print | head -20
-
-      - name: Run deterministic A-B replay
-        run: |
-          python v190/replay_compare_v190.py \
-            --config v190/config.yaml \
-            --data-root data \
+          python recovered/run_v190_ab.py \
             --date "${{ steps.req.outputs.date }}" \
             --start-equity "${{ steps.req.outputs.equity }}" \
             --out ab_result.json
-          echo "=== RESULT ==="
+          echo "=== RESULT_JSON_BEGIN ==="
           cat ab_result.json
+          echo "=== RESULT_JSON_END ==="
 
       - name: Upload result
         if: always()
