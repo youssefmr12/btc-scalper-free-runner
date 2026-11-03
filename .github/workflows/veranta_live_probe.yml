@@ -1,0 +1,26 @@
+name: Veranta BTC Upside Live Economics Probe
+on:
+  push:
+    branches: [main]
+    paths:
+      - "veranta_live_probe.py"
+      - ".github/workflows/veranta_live_probe.yml"
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install veranta-sdk
+      - run: python -u veranta_live_probe.py
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: veranta-live-economics
+          path: veranta_live_economics.json
+          if-no-files-found: warn
