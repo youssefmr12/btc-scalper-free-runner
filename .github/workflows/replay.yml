@@ -27,10 +27,8 @@ jobs:
           EQUITY=$(jq -r '.start_equity' request.json)
           echo "date=$DATE" >> "$GITHUB_OUTPUT"
           echo "equity=$EQUITY" >> "$GITHUB_OUTPUT"
-          echo "Replay date: $DATE"
-          echo "Starting equity: $EQUITY"
 
-      - name: Checkout private strategy package
+      - name: Checkout private benchmark package
         uses: actions/checkout@v4
         with:
           repository: youssefmr12/forma-body-os
@@ -44,24 +42,35 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install replay dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install "lighter-data" pyarrow PyYAML
 
-      - name: Prepare V1.8.7 and V1.9
+      - name: Repair and prepare benchmark package
+        shell: bash
         run: |
+          set -e
           mkdir -p v190
-          unzip -q private/btc_scalper_v190/v190_ab_package.zip -d v190
+          SRC="private/btc_scalper_v190/v190_ab_package.zip"
+          if unzip -t "$SRC" >/tmp/ziptest.log 2>&1; then
+            unzip -q "$SRC" -d v190
+          else
+            cat /tmp/ziptest.log || true
+            yes | zip -FF "$SRC" --out /tmp/v190_repaired.zip >/tmp/zipfix.log 2>&1 || true
+            cat /tmp/zipfix.log || true
+            unzip -t /tmp/v190_repaired.zip
+            unzip -q /tmp/v190_repaired.zip -d v190
+          fi
+          find v190 -maxdepth 2 -type f -print
           python -m py_compile v190/*.py
 
-      - name: Download Lighter BTC L2 and trades
+      - name: Download historical BTC data
         run: |
           lighter-data tardis --coins BTC --dates "${{ steps.req.outputs.date }}" --root data
-          echo "Downloaded parquet files:"
-          find data -type f -name '*.parquet' | wc -l
+          find data -type f -name '*.parquet' -print | head -20
 
-      - name: Run deterministic causal A-B replay
+      - name: Run deterministic A-B replay
         run: |
           python v190/replay_compare_v190.py \
             --config v190/config.yaml \
@@ -69,12 +78,7 @@ jobs:
             --date "${{ steps.req.outputs.date }}" \
             --start-equity "${{ steps.req.outputs.equity }}" \
             --out ab_result.json
-          python - <<'PY'
-          import json
-          with open("ab_result.json") as f:
-              d=json.load(f)
-          print(json.dumps(d, indent=2))
-          PY
+          cat ab_result.json
 
       - name: Upload result
         if: always()
