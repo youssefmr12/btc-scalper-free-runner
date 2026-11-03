@@ -40,7 +40,7 @@ jobs:
           dst.write_bytes(gzip.decompress(base64.b64decode(src.read_text().strip())))
           print("decoded", dst.stat().st_size)
           PY
-      - run: pip install PyYAML
+      - run: pip install PyYAML requests pandas
       - name: Exact Tardis replay
         run: python -u v17_exact_tardis_runner.py --date "${{ matrix.date }}" --private-root private --out "result/${{ matrix.date }}.json"
       - name: Print compact result
