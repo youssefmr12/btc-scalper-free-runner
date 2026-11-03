@@ -1,0 +1,53 @@
+name: V1.7 Exact TurboFlow 2026-10-01
+on:
+  push:
+    branches: [v17-exact-oct1]
+    paths:
+      - ".github/workflows/v17_exact_oct1.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout private exact V1.7 replay bundle
+        uses: actions/checkout@v4
+        with:
+          repository: youssefmr12/forma-body-os
+          ref: btc-v17-turboflow-oct1-replay
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Decode exact V1.7 replay
+        run: |
+          mkdir -p work result
+          python - <<'PY'
+          import base64,gzip,pathlib
+          src=pathlib.Path("private/tmp_v17_replay/v17_oct1_turboflow_combined.py.gz.b64")
+          dst=pathlib.Path("work/v17_oct1_turboflow_combined.py")
+          dst.write_bytes(gzip.decompress(base64.b64decode(src.read_text().strip())))
+          print("decoded_bytes", dst.stat().st_size)
+          PY
+      - name: Install dependencies
+        run: pip install pandas pyarrow pyyaml requests
+      - name: Run exact V1.7 on 2026-10-01
+        run: python -u work/v17_oct1_turboflow_combined.py --data data --out result/FINAL_V17_EXACT_TURBOFLOW_2026-10-01.json
+      - name: Print result
+        if: always()
+        run: |
+          echo "===FINAL_JSON_START==="
+          cat result/FINAL_V17_EXACT_TURBOFLOW_2026-10-01.json || true
+          echo "===FINAL_JSON_END==="
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v17-exact-turboflow-2026-10-01
+          path: result/FINAL_V17_EXACT_TURBOFLOW_2026-10-01.json
+          if-no-files-found: warn
+          retention-days: 1
