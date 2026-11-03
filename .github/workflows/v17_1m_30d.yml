@@ -1,0 +1,107 @@
+name: V1.7 to BTC 1m 30D Feasibility
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/v17_1m_30d.yml']
+permissions:
+  contents: read
+
+jobs:
+  replay:
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        date:
+          - "2024-05-01"
+          - "2024-06-01"
+          - "2024-07-01"
+          - "2024-08-01"
+          - "2024-09-01"
+          - "2024-10-01"
+          - "2024-11-01"
+          - "2024-12-01"
+          - "2025-01-01"
+          - "2025-02-01"
+          - "2025-03-01"
+          - "2025-04-01"
+          - "2025-05-01"
+          - "2025-06-01"
+          - "2025-07-01"
+          - "2025-08-01"
+          - "2025-09-01"
+          - "2025-10-01"
+          - "2025-11-01"
+          - "2025-12-01"
+          - "2026-01-01"
+          - "2026-02-01"
+          - "2026-03-01"
+          - "2026-04-01"
+          - "2026-05-01"
+          - "2026-06-01"
+          - "2026-07-01"
+          - "2026-08-01"
+          - "2026-10-01"
+          - "2026-11-01"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout private replay branch
+        uses: actions/checkout@v4
+        with:
+          repository: youssefmr12/forma-body-os
+          ref: btc-scalper-v17-1m-feasibility
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install PyYAML
+      - name: Replay one day
+        run: |
+          mkdir -p result
+          python -u private/btc_scalper_v17_1m/v17_1m_replay.py \
+            --date "${{ matrix.date }}" \
+            --data-dir data_v17 \
+            --out "result/${{ matrix.date }}.json"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v17-1m-${{ matrix.date }}
+          path: result/*.json
+          if-no-files-found: warn
+
+  aggregate:
+    needs: replay
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout private replay branch
+        uses: actions/checkout@v4
+        with:
+          repository: youssefmr12/forma-body-os
+          ref: btc-scalper-v17-1m-feasibility
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: v17-1m-*
+          path: all_results
+          merge-multiple: true
+      - name: Aggregate DEV and sealed HOLDOUT
+        run: |
+          python private/btc_scalper_v17_1m/aggregate_30d.py \
+            --root all_results \
+            --out FINAL_30D_1M_RESULT.json
+          cat FINAL_30D_1M_RESULT.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v17-1m-final-30d
+          path: FINAL_30D_1M_RESULT.json
+          if-no-files-found: warn
