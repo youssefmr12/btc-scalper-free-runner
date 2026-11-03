@@ -14,7 +14,6 @@ jobs:
   replay:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-
     steps:
       - name: Checkout public runner
         uses: actions/checkout@v4
@@ -27,10 +26,9 @@ jobs:
           EQUITY=$(jq -r '.start_equity' request.json)
           echo "date=$DATE" >> "$GITHUB_OUTPUT"
           echo "equity=$EQUITY" >> "$GITHUB_OUTPUT"
-          echo "Historical replay date: $DATE"
-          echo "Starting equity: $EQUITY"
+          echo "DATE=$DATE START_EQUITY=$EQUITY"
 
-      - name: Checkout private replay package
+      - name: Checkout private strategy sources
         uses: actions/checkout@v4
         with:
           repository: youssefmr12/forma-body-os
@@ -45,29 +43,20 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install PyYAML
+        run: pip install PyYAML
 
-      - name: Prepare recovered replay
+      - name: Compile recovered strategy
         run: |
-          rm -rf recovered recovered_v190_replay.zip
-          mkdir -p recovered
-          base64 -d private/btc_scalper_v190/recovered_v190_replay.b64 > recovered_v190_replay.zip
-          echo "ZIP_SHA256=$(sha256sum recovered_v190_replay.zip | awk '{print $1}')"
-          unzip -t recovered_v190_replay.zip
-          unzip -q recovered_v190_replay.zip -d recovered
-          python -m py_compile recovered/*.py
+          cd private/btc_scalper_v190/recovered_sources
+          python -m py_compile signal_engine.py risk_manager.py capital_risk_engine.py execution_shield.py edge_quality_v185.py edge_quality_v187.py confirmed_move_compounder_v190.py replay_reconstructed_v190.py
 
-      - name: Run historical deterministic replay
+      - name: Run streaming causal A-B replay
         run: |
-          python recovered/run_v190_ab.py \
+          python -u private/btc_scalper_v190/recovered_sources/replay_reconstructed_v190.py \
             --date "${{ steps.req.outputs.date }}" \
-            --start-equity "${{ steps.req.outputs.equity }}" \
-            --out ab_result.json
-          echo "=== RESULT_JSON_BEGIN ==="
+            --out ab_result.json \
+            --data-dir data_raw
           cat ab_result.json
-          echo "=== RESULT_JSON_END ==="
 
       - name: Upload result
         if: always()
