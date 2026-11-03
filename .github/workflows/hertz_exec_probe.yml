@@ -1,0 +1,16 @@
+name: HertzFlow Live Execution Fee Probe
+on:
+  push:
+    branches: [main]
+    paths: ["hertz_exec_probe.mjs",".github/workflows/hertz_exec_probe.yml"]
+permissions: {contents: read}
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: "20"}
+      - run: npm init -y >/dev/null 2>&1 && npm install @hertzflow/sdk-v2 viem
+      - run: node hertz_exec_probe.mjs
