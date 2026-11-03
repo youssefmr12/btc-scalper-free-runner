@@ -58,6 +58,13 @@ jobs:
 
           src = Path("private/btc_scalper_v190/v190_ab_package.zip")
           out = Path("v190")
+          import zipfile
+          try:
+              with zipfile.ZipFile(src) as zf:
+                  for zi in zf.infolist():
+                      print("CENTRAL", zi.filename, "size", zi.file_size, "csize", zi.compress_size, "crc", f"{zi.CRC:08x}", "offset", zi.header_offset)
+          except Exception as e:
+              print("CENTRAL_READ_FAIL", repr(e))
           b = src.read_bytes()
           sig = b"PK\x03\x04"
           positions = []
