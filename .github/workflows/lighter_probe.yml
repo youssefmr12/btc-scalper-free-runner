@@ -1,0 +1,38 @@
+name: Lighter BTC Data Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/lighter_probe.yml"
+      - "request.json"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install "lighter-data" pyarrow
+      - name: Download and inspect
+        shell: bash
+        run: |
+          DATE=$(jq -r '.date' request.json)
+          lighter-data tardis --coins BTC --dates "$DATE" --root data
+          python - <<'PY'
+          from pathlib import Path
+          import pyarrow.parquet as pq
+          for p in sorted(Path("data").rglob("*.parquet")):
+              pf=pq.ParquetFile(p)
+              print("FILE",p,"ROWS",pf.metadata.num_rows)
+              print("SCHEMA",pf.schema_arrow)
+              t=pf.read_row_group(0).slice(0,3).to_pylist()
+              print("SAMPLE",t)
+          PY
