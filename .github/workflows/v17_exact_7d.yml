@@ -42,7 +42,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install replay dependencies
-        run: pip install --no-cache-dir requests pyarrow PyYAML
+        run: pip install --no-cache-dir requests pyarrow PyYAML pandas
 
       - name: Verify and unpack proven exact V1.7 bundle
         shell: bash
