@@ -1,0 +1,106 @@
+name: V1.7 Exact 7D High-Fidelity Replay
+on:
+  push:
+    branches: [main]
+    paths:
+      - "v17_exact_7d_shard.py"
+      - "v17_exact_7d_aggregate.py"
+      - ".github/workflows/v17_exact_7d.yml"
+permissions:
+  contents: read
+
+jobs:
+  replay:
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        date:
+          - "2026-10-28"
+          - "2026-10-29"
+          - "2026-10-30"
+          - "2026-10-31"
+          - "2026-11-01"
+          - "2026-11-02"
+          - "2026-11-03"
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout exact frozen V1.7 source package
+        uses: actions/checkout@v4
+        with:
+          repository: youssefmr12/forma-body-os
+          ref: btc-v17-turboflow-multiday-replay
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install replay dependencies
+        run: pip install --no-cache-dir requests pyarrow PyYAML
+
+      - name: Verify and unpack exact V1.7
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p exact_v17
+          base64 -d private/solana_monster/btc_v17_replay/v17_signal_core.tgz.b64 > exact_v17.tgz
+          echo "PACKAGE_SHA256=$(sha256sum exact_v17.tgz | awk '{print $1}')"
+          test "$(sha256sum exact_v17.tgz | awk '{print $1}')" = "fee1ab549c6558f61986b6801a7d2c5a1ae17b73cb2cbc75690a9f447b2c8f63"
+          tar xzf exact_v17.tgz -C exact_v17
+          test -f exact_v17/signal_engine.py
+          test -f exact_v17/config.yaml
+          python -m py_compile exact_v17/signal_engine.py v17_exact_7d_shard.py
+          echo "EXACT_V17_SOURCE=PASS"
+
+      - name: Replay one complete UTC day
+        run: |
+          mkdir -p result
+          python -u v17_exact_7d_shard.py \
+            --date "${{ matrix.date }}" \
+            --core-dir exact_v17 \
+            --data-dir data_exact \
+            --out "result/${{ matrix.date }}.json"
+
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v17-exact-7d-${{ matrix.date }}
+          path: result/*.json
+          if-no-files-found: warn
+          compression-level: 6
+          retention-days: 1
+
+  aggregate:
+    needs: replay
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: v17-exact-7d-*
+          path: all_results
+          merge-multiple: true
+      - name: Continuous $20 compound and robustness aggregation
+        run: |
+          python -u v17_exact_7d_aggregate.py \
+            --root all_results \
+            --out FINAL_7D_RESULT.json
+          cat FINAL_7D_RESULT.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v17-exact-7d-final
+          path: FINAL_7D_RESULT.json
+          if-no-files-found: warn
+          retention-days: 1
