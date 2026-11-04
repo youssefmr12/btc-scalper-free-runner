@@ -50,11 +50,13 @@ jobs:
           set -euo pipefail
           mkdir -p exact_v17
           base64 -d private/solana_monster/btc_v17_replay/v17_signal_core.tgz.b64 > exact_v17.tgz
-          echo "PACKAGE_SHA256=$(sha256sum exact_v17.tgz | awk '{print $1}')"
-          test "$(sha256sum exact_v17.tgz | awk '{print $1}')" = "fee1ab549c6558f61986b6801a7d2c5a1ae17b73cb2cbc75690a9f447b2c8f63"
           tar xzf exact_v17.tgz -C exact_v17
           test -f exact_v17/signal_engine.py
           test -f exact_v17/config.yaml
+          echo "SIGNAL_SHA256=$(sha256sum exact_v17/signal_engine.py | awk '{print $1}')"
+          echo "CONFIG_SHA256=$(sha256sum exact_v17/config.yaml | awk '{print $1}')"
+          test "$(sha256sum exact_v17/signal_engine.py | awk '{print $1}')" = "8ebbfcc01101bffa3097827028f4d270a93fb02c3ea99321dfe053b690d7fd76"
+          test "$(sha256sum exact_v17/config.yaml | awk '{print $1}')" = "96dd4131f545d35dd2f01794a41368fcb1e0da5667d77198ced15d7305659441"
           python -m py_compile exact_v17/signal_engine.py v17_exact_7d_shard.py
           echo "EXACT_V17_SOURCE=PASS"
 
