@@ -1,4 +1,4 @@
-name: RS9 6h replay verified executable
+name: RS9 6h replay verified executable deps
 on:
   push:
     branches: [rs9-6h-replay-20261110]
@@ -39,7 +39,7 @@ jobs:
           python rs9_replay_patch_optional_binbook.py
           python -m py_compile rs9_replay_run/bundle/replay_6h.py
       - name: Install dependencies
-        run: python -m pip install --quiet pyyaml
+        run: python -m pip install --quiet pyyaml websocket-client
       - name: Run high-fidelity 6h replay
         env:
           START_EQUITY: "2.30"
