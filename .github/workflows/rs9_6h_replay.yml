@@ -1,4 +1,4 @@
-name: RS9 6h replay verified final
+name: RS9 6h replay verified final 2
 on:
   push:
     branches: [rs9-6h-replay-20261110]
