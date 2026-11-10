@@ -1,0 +1,33 @@
+DOWNLOAD by_trades https://public.bybit.com/trading/BTCUSDT/BTCUSDT2026-11-09.csv.gz
+DOWNLOADED by_trades 79471084
+DOWNLOAD by_book https://quote-saver.bycsi.com/orderbook/linear/BTCUSDT/2026-11-09_BTCUSDT_ob200.data.zip
+DOWNLOADED by_book 292425042
+DOWNLOAD bin_agg https://data.binance.vision/data/futures/um/daily/aggTrades/BTCUSDT/BTCUSDT-aggTrades-2026-11-09.zip
+DOWNLOADED bin_agg 18773137
+DOWNLOAD bin_book https://data.binance.vision/data/futures/um/daily/bookTicker/BTCUSDT/BTCUSDT-bookTicker-2026-11-09.zip
+Traceback (most recent call last):
+  File "/home/runner/work/btc-scalper-free-runner/btc-scalper-free-runner/rs9_replay_run/bundle/replay_6h.py", line 393, in <module>
+    if __name__=='__main__':main()
+                            ~~~~^^
+  File "/home/runner/work/btc-scalper-free-runner/btc-scalper-free-runner/rs9_replay_run/bundle/replay_6h.py", line 335, in main
+    paths={k:dl(k) for k in URLS}
+             ~~^^^
+  File "/home/runner/work/btc-scalper-free-runner/btc-scalper-free-runner/rs9_replay_run/bundle/replay_6h.py", line 40, in dl
+    with urllib.request.urlopen(req,timeout=120) as r, p.open('wb') as f:
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/urllib/request.py", line 187, in urlopen
+    return opener.open(url, data, timeout)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/urllib/request.py", line 493, in open
+    response = meth(req, response)
+  File "/usr/lib/python3.14/urllib/request.py", line 602, in http_response
+    response = self.parent.error(
+        'http', request, response, code, msg, hdrs)
+  File "/usr/lib/python3.14/urllib/request.py", line 531, in error
+    return self._call_chain(*args)
+           ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/usr/lib/python3.14/urllib/request.py", line 464, in _call_chain
+    result = func(*args)
+  File "/usr/lib/python3.14/urllib/request.py", line 611, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 404: Not Found
