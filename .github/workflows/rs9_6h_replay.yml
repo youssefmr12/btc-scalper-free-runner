@@ -17,10 +17,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: rs9-6h-replay-20261110
-      - name: Reconstruct replay bundle
+      - name: Reconstruct verified replay bundle
         run: |
           mkdir -p rs9_replay_run
-          cat rs9_replay_bundle_nopyc/part*.txt | base64 -d > rs9_replay_run/bundle.zip
+          cat             rs9_replay_bundle_small/chunk00.txt             rs9_replay_bundle_small/chunk01.txt             rs9_replay_bundle_small/bridgeA.txt             rs9_replay_bundle_nopyc/part01.txt             rs9_replay_bundle_nopyc/part02.txt             rs9_replay_bundle_small/bridgeB.txt             rs9_replay_bundle_small/chunk08.txt             rs9_replay_bundle_small/chunk09.txt             | base64 -d > rs9_replay_run/bundle.zip
+          echo "07790a3f972ec64bc5b1822e4ed15ccd6d4ffab3089cc1a4ab5532360fd53a1d  rs9_replay_run/bundle.zip" | sha256sum -c -
           unzip -q rs9_replay_run/bundle.zip -d rs9_replay_run/bundle
           python -m py_compile rs9_replay_run/bundle/replay_6h.py
       - name: Install dependencies
