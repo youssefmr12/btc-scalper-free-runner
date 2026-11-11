@@ -15,7 +15,7 @@ LEVERAGE=50.; TAKER_DELAY_MS=300; MIN_NOTIONAL=10.; MAINT_MARGIN=.012; LIQ_FEE_P
 TICK_MS=100; WARMUP_HOURS=2; TARGET_BPS=10.; STOP_BPS=2.5; HORIZON_MS=10000
 RETRAIN_MS=30*60*1000; COOLDOWN_MS=700
 DATA=Path("rs11_24h_data"); OUT=Path("rs11_24h_output"); DATA.mkdir(exist_ok=True); OUT.mkdir(exist_ok=True)
-BASE="https://api.cryptohftdata.com/download?file="
+BASE="https://api.cryptohftdata.com/v1/download?file="
 
 def dts(s): return dt.datetime.fromisoformat(s).replace(tzinfo=dt.timezone.utc)
 def ns(x): return int(x.timestamp()*1e9)
