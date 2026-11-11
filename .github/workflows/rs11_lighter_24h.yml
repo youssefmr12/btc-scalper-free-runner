@@ -1,0 +1,37 @@
+name: RS11 Lighter 24h Replay
+on:
+  push:
+    branches:
+      - rs11-lighter-24h-20261110
+    paths:
+      - rs11_24h_replay.py
+      - .github/workflows/rs11_lighter_24h.yml
+  workflow_dispatch:
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install replay dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests numpy pandas pyarrow sortedcontainers scikit-learn
+      - name: Run causal 24h replay
+        env:
+          TEST_DATE: '2026-11-10'
+          START_EQUITY: '5'
+        run: |
+          python rs11_24h_replay.py 2>&1 | tee rs11_24h_run.log
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rs11-lighter-24h-20261110
+          path: |
+            rs11_24h_output/
+            rs11_24h_run.log
+          if-no-files-found: warn
