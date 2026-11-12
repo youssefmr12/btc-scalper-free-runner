@@ -1,0 +1,41 @@
+name: MFLIP V6.2 Full-L2 1h
+on:
+  push:
+    branches: [mflip-v62-full-l2-1h-20261112]
+    paths:
+      - 'research/mflip_v62_1h/**'
+      - '.github/workflows/mflip_v62_1h.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -q requests numpy pandas pyarrow sortedcontainers scikit-learn
+      - name: Run frozen one-hour Full-L2 walk-forward
+        run: |
+          cd research/mflip_v62_1h
+          python run_v62_1h.py | tee run.log
+      - name: Print result
+        if: always()
+        run: |
+          cd research/mflip_v62_1h
+          if [ -f v62out/result.json ]; then cat v62out/result.json; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mflip-v62-full-l2-1h-result
+          path: |
+            research/mflip_v62_1h/v62out/
+            research/mflip_v62_1h/run.log
+          if-no-files-found: warn
+          retention-days: 7
