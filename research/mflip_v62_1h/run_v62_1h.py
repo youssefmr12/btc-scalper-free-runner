@@ -88,9 +88,9 @@ def groups(p):
  pf=pq.ParquetFile(p);N=set(pf.schema.names);tc='event_time' if 'event_time' in N else 'received_time';cols=[tc,'event_type','side','price','quantity']+[x for x in ['final_update_id','prev_final_update_id'] if x in N]
  cur=None;rows=[];meta=None
  for ba in pf.iter_batches(batch_size=200000,columns=cols):
-  d=ba.to_pydict();nn=len(d[tc])
+  d=ba.to_pydict();nn=len(d[tc]);F=d.get('final_update_id');P=d.get('prev_final_update_id')
   for i in range(nn):
-   t=ms(d[tc][i]);typ=d['event_type'][i];fid=d.get('final_update_id',[None]*nn)[i];pr=d.get('prev_final_update_id',[None]*nn)[i];fid=-1 if fid is None else int(fid);pr=-1 if pr is None else int(pr);key=(t,str(typ),fid)
+   t=ms(d[tc][i]);typ=d['event_type'][i];fid=F[i] if F is not None else None;pr=P[i] if P is not None else None;fid=-1 if fid is None else int(fid);pr=-1 if pr is None else int(pr);key=(t,str(typ),fid)
    if cur is not None and key!=cur:yield meta,rows;rows=[]
    cur=key;meta=(t,typ,fid,pr);rows.append((d['side'][i],float(d['price'][i]),float(d['quantity'][i])))
  if cur is not None:yield meta,rows
