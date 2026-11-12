@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install dependencies
-        run: pip install -q requests numpy pandas pyarrow sortedcontainers scikit-learn
+        run: pip install -q requests numpy pandas pyarrow sortedcontainers scikit-learn zstandard
       - name: Fetch SHA-verified Tardis Full-L2
         run: |
           set -euo pipefail
