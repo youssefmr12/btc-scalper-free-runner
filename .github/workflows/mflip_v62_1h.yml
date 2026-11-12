@@ -20,30 +20,17 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install dependencies
-        run: pip install -q requests numpy pandas pyarrow sortedcontainers scikit-learn zstandard
-      - name: Fetch and normalize hourly Full-L2
+        run: pip install -q requests numpy pandas pyarrow sortedcontainers scikit-learn
+      - name: Fetch SHA-verified Tardis Full-L2
         run: |
           set -euo pipefail
           cd research/mflip_v62_1h
           mkdir -p v62data
-          curl -fL --retry 5 --retry-delay 2             'https://api.cryptohftdata.com/v1/download?file=binance_futures/2025-12-01/00/BTCUSDT_orderbook.parquet'             -o v62data/ob.download
-          python - <<'PY'
-          from pathlib import Path
-          import shutil, zstandard as zstd
-          src=Path('v62data/ob.download'); dst=Path('v62data/ob.parquet')
-          magic=src.read_bytes()[:4]
-          print('L2_BYTES',src.stat().st_size,'MAGIC',magic.hex())
-          if magic==b'PAR1':
-              shutil.move(src,dst)
-          elif magic==b'\x28\xb5\x2f\xfd':
-              with src.open('rb') as fi, dst.open('wb') as fo:
-                  with zstd.ZstdDecompressor().stream_reader(fi) as zr:
-                      shutil.copyfileobj(zr,fo,1024*1024)
-              print('L2_DECOMPRESSED_BYTES',dst.stat().st_size)
-          else:
-              raise SystemExit('unknown L2 encoding: '+magic.hex())
-          assert dst.read_bytes()[:4]==b'PAR1'
-          PY
+          curl -fL --retry 5 --retry-delay 2 \
+            'https://datasets.tardis.dev/v1/binance-futures/incremental_book_L2/2025/12/01/BTCUSDT.csv.gz' \
+            -o v62data/book.csv.gz
+          echo '53efda11b664eb0a3ea706e267dc185f51a9d1ef760e328181746185be656043  v62data/book.csv.gz' | sha256sum -c -
+          ls -lh v62data/book.csv.gz
       - name: Run frozen one-hour Full-L2 walk-forward
         run: |
           set -euo pipefail
