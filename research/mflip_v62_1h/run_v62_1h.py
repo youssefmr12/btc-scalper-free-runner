@@ -54,7 +54,7 @@ def st(x):
  if not len(x):return {'n':0,'wr':None,'pf':None,'avg':None}
  gp=x[x>0].sum();gl=-x[x<0].sum();return {'n':len(x),'wr':float((x>0).mean()),'pf':float(gp/gl) if gl else None,'avg':float(x.mean())}
 class Book:
- def __init__(q):q.b=SortedDict();q.a=SortedDict();q.v=False;q.f=deque();q.m=deque();q.snap=q.gap=q.cross=0;q.last=None
+ def __init__(q):q.b=SortedDict();q.a=SortedDict();q.v=False;q.f=deque();q.m=deque();q.snap=q.gap=q.cross=0;q.last=None;q.rows=0
  def apply(q,t,typ,fid,prev,rows):
   sn=str(typ).lower().startswith('snapshot')
   if sn:q.b.clear();q.a.clear();q.v=False;q.snap+=1
@@ -85,14 +85,20 @@ class Book:
    if tt<=t-w:return m
   return q.m[0][1] if q.m else np.nan
 def groups(p):
- pf=pq.ParquetFile(p);N=set(pf.schema.names);tc='event_time' if 'event_time' in N else 'received_time';cols=[tc,'event_type','side','price','quantity']+[x for x in ['final_update_id','prev_final_update_id'] if x in N]
  cur=None;rows=[];meta=None
- for ba in pf.iter_batches(batch_size=200000,columns=cols):
-  d=ba.to_pydict();nn=len(d[tc]);F=d.get('final_update_id');P=d.get('prev_final_update_id')
-  for i in range(nn):
-   t=ms(d[tc][i]);typ=d['event_type'][i];fid=F[i] if F is not None else None;pr=P[i] if P is not None else None;fid=-1 if fid is None else int(fid);pr=-1 if pr is None else int(pr);key=(t,str(typ),fid)
-   if cur is not None and key!=cur:yield meta,rows;rows=[]
-   cur=key;meta=(t,typ,fid,pr);rows.append((d['side'][i],float(d['price'][i]),float(d['quantity'][i])))
+ with gzip.open(p,'rt',newline='') as f:
+  rd=csv.DictReader(f)
+  need={'timestamp','is_snapshot','side','price','amount'}
+  if not need.issubset(set(rd.fieldnames or [])):raise RuntimeError('L2 schema '+str(rd.fieldnames))
+  for r in rd:
+   t=int(r['timestamp'])//1000
+   if t<B-1000:continue
+   if t>B+3600_000+1000:break
+   sn=str(r['is_snapshot']).lower() in ('true','1','yes')
+   typ='snapshot' if sn else 'update';key=(t,typ)
+   if cur is not None and key!=cur:
+    yield meta,rows;rows=[]
+   cur=key;meta=(t,typ,-1,-1);rows.append((r['side'],float(r['price']),float(r['amount'])))
  if cur is not None:yield meta,rows
 def tflow(tt,ss,nn,t,w,side):
  l=np.searchsorted(tt,t-w);r=np.searchsorted(tt,t,'right');den=nn[l:r].sum();return float(side*np.sum(ss[l:r]*nn[l:r])/den) if den else 0.
@@ -163,6 +169,6 @@ def main():
  if full['n']!=70 or abs(full['pf']-1.609540990289726)>.00001:raise RuntimeError('V6 baseline mismatch '+str(full))
  stress={str(x):execute(oos,rm,tt,px,x)[0] for x in [300,400,500,750]}
  rp=np.array([0 if z=='REJECT' else (r.flip if z=='FLIP' else r.cont) for (_,r),z in zip(oos.iterrows(),R)]);delta=rp-oos.cont.values;rng=np.random.default_rng(7);M=[rng.choice(delta,len(delta),replace=True).mean() for _ in range(5000)];lo,hi=np.quantile(M,[.025,.975])
- RES={'name':'MFLIP_V6.2_FULL_L2_1H','window':'2025-12-01 00:00-01:00 UTC','split':'first30m train / last30m untouched OOS','data':{'l2':'CryptoHFTData Binance Futures hourly snapshots+deltas','execution':'Tardis raw trades','l2_rows':pq.ParquetFile(ob).metadata.num_rows,'l2_bytes':ob.stat().st_size,'trade_sha':sha(tr)},'integrity':{'snapshots':q.snap,'gaps':q.gap,'crosses':q.cross,'valid_events':int(F.ready.sum()),'events':len(F)},'selection':sel,'train_labels':trn.label.value_counts().to_dict(),'v6_full_hour':full,'v6_oos':base,'v62_oos':v62,'freq_retention':v62['n']/base['n'],'routes':{'continue':R.count('CONTINUE'),'flip':R.count('FLIP'),'reject':R.count('REJECT'),'invalid_default_continue':int((~v).sum())},'latency_stress':stress,'bootstrap':{'mean_delta_per_signal':float(delta.mean()),'ci95':[float(lo),float(hi)],'p_gt_0':float(np.mean(np.array(M)>0))},'note':'one-hour diagnostic; no OOS tuning'}
+ RES={'name':'MFLIP_V6.2_FULL_L2_1H','window':'2025-12-01 00:00-01:00 UTC','split':'first30m train / last30m untouched OOS','data':{'l2':'Tardis Binance Futures incremental_book_L2 exact daily file; replay limited to first hour','execution':'Tardis raw trades','l2_rows_processed':q.rows,'l2_bytes':ob.stat().st_size,'l2_sha':sha(ob),'trade_sha':sha(tr)},'integrity':{'snapshots':q.snap,'gaps':q.gap,'crosses':q.cross,'valid_events':int(F.ready.sum()),'events':len(F)},'selection':sel,'train_labels':trn.label.value_counts().to_dict(),'v6_full_hour':full,'v6_oos':base,'v62_oos':v62,'freq_retention':v62['n']/base['n'],'routes':{'continue':R.count('CONTINUE'),'flip':R.count('FLIP'),'reject':R.count('REJECT'),'invalid_default_continue':int((~v).sum())},'latency_stress':stress,'bootstrap':{'mean_delta_per_signal':float(delta.mean()),'ci95':[float(lo),float(hi)],'p_gt_0':float(np.mean(np.array(M)>0))},'note':'one-hour diagnostic; no OOS tuning'}
  O.joinpath('result.json').write_text(json.dumps(RES,indent=2));F.to_csv(O/'features.csv',index=False);pd.DataFrame(rows,columns=['rel_s','route','net']).to_csv(O/'routes.csv',index=False);print('FINAL',json.dumps(RES),flush=True)
 if __name__=='__main__':main()
