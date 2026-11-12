@@ -20,9 +20,33 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install dependencies
-        run: pip install -q requests numpy pandas pyarrow sortedcontainers scikit-learn
+        run: pip install -q requests numpy pandas pyarrow sortedcontainers scikit-learn zstandard
+      - name: Fetch and normalize hourly Full-L2
+        run: |
+          set -euo pipefail
+          cd research/mflip_v62_1h
+          mkdir -p v62data
+          curl -fL --retry 5 --retry-delay 2             'https://api.cryptohftdata.com/v1/download?file=binance_futures/2025-12-01/00/BTCUSDT_orderbook.parquet'             -o v62data/ob.download
+          python - <<'PY'
+          from pathlib import Path
+          import shutil, zstandard as zstd
+          src=Path('v62data/ob.download'); dst=Path('v62data/ob.parquet')
+          magic=src.read_bytes()[:4]
+          print('L2_BYTES',src.stat().st_size,'MAGIC',magic.hex())
+          if magic==b'PAR1':
+              shutil.move(src,dst)
+          elif magic==b'\x28\xb5\x2f\xfd':
+              with src.open('rb') as fi, dst.open('wb') as fo:
+                  with zstd.ZstdDecompressor().stream_reader(fi) as zr:
+                      shutil.copyfileobj(zr,fo,1024*1024)
+              print('L2_DECOMPRESSED_BYTES',dst.stat().st_size)
+          else:
+              raise SystemExit('unknown L2 encoding: '+magic.hex())
+          assert dst.read_bytes()[:4]==b'PAR1'
+          PY
       - name: Run frozen one-hour Full-L2 walk-forward
         run: |
+          set -euo pipefail
           cd research/mflip_v62_1h
           python run_v62_1h.py | tee run.log
       - name: Print result
