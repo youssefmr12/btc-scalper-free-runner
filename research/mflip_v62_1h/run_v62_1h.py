@@ -1,4 +1,5 @@
-import csv,gzip,hashlib,json,time
+import csv,gzip,hashlib,json,time,io
+import zstandard as zstd
 from collections import deque
 from pathlib import Path
 import requests,numpy as np,pandas as pd,pyarrow.parquet as pq
@@ -9,7 +10,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss
 B=1764547200000;LAT=300;CUT=250;H=4000;TP=4.75;SL=.40;COST=.44
 D=Path('v62data');O=Path('v62out');D.mkdir(exist_ok=True);O.mkdir(exist_ok=True)
-OB='https://api.cryptohftdata.com/v1/download?file=binance_futures/2025-12-01/00/BTCUSDT_orderbook.parquet'
+L2URL='https://datasets.tardis.dev/v1/binance-futures/incremental_book_L2/2025/12/01/BTCUSDT.csv.gz'; L2SHA='53efda11b664eb0a3ea706e267dc185f51a9d1ef760e328181746185be656043'
 TR='https://datasets.tardis.dev/v1/binance-futures/trades/2025/12/01/BTCUSDT.csv.gz'; TRSHA='70c587a603b739fec775beada5e943ec8d4409b49bbc607bf3cabec5aa35d26f'
 PXY=['leader','f250','f1','f3','ci','mx']; L2=['p250','p1s','a250','r250','a1s','r1s','d1','d5','d10','micro','vamp','q1','m250','m1s','tf250','tf1s','abs250','abs1s','spread']
 def dl(u,p):
@@ -56,7 +57,7 @@ def st(x):
 class Book:
  def __init__(q):q.b=SortedDict();q.a=SortedDict();q.v=False;q.f=deque();q.m=deque();q.snap=q.gap=q.cross=0;q.last=None;q.rows=0
  def apply(q,t,typ,fid,prev,rows):
-  sn=str(typ).lower().startswith('snapshot')
+  q.rows+=len(rows);sn=str(typ).lower().startswith('snapshot')
   if sn:q.b.clear();q.a.clear();q.v=False;q.snap+=1
   elif q.v and prev>=0 and q.last is not None and prev!=q.last:q.v=False;q.gap+=1
   for side,p,z in rows:
@@ -84,22 +85,32 @@ class Book:
   for tt,m in reversed(q.m):
    if tt<=t-w:return m
   return q.m[0][1] if q.m else np.nan
+def _text_reader(p):
+ raw=open(p,'rb');magic=raw.read(4);raw.seek(0)
+ if magic==b'\x28\xb5\x2f\xfd':
+  rr=zstd.ZstdDecompressor().stream_reader(raw);return raw,io.TextIOWrapper(rr,newline='')
+ if magic[:2]==b'\x1f\x8b':
+  rr=gzip.GzipFile(fileobj=raw);return raw,io.TextIOWrapper(rr,newline='')
+ return raw,io.TextIOWrapper(raw,newline='')
 def groups(p):
- cur=None;rows=[];meta=None
- with gzip.open(p,'rt',newline='') as f:
-  rd=csv.DictReader(f)
-  need={'timestamp','is_snapshot','side','price','amount'}
+ cur=None;rows=[];meta=None;raw,txt=_text_reader(p)
+ try:
+  rd=csv.DictReader(txt);need={'timestamp','is_snapshot','side','price','amount'}
   if not need.issubset(set(rd.fieldnames or [])):raise RuntimeError('L2 schema '+str(rd.fieldnames))
   for r in rd:
    t=int(r['timestamp'])//1000
    if t<B-1000:continue
    if t>B+3600_000+1000:break
-   sn=str(r['is_snapshot']).lower() in ('true','1','yes')
-   typ='snapshot' if sn else 'update';key=(t,typ)
+   sn=str(r['is_snapshot']).lower() in ('true','1','yes');typ='snapshot' if sn else 'update';key=(t,typ)
    if cur is not None and key!=cur:
     yield meta,rows;rows=[]
    cur=key;meta=(t,typ,-1,-1);rows.append((r['side'],float(r['price']),float(r['amount'])))
- if cur is not None:yield meta,rows
+  if cur is not None:yield meta,rows
+ finally:
+  try:txt.close()
+  except:pass
+  try:raw.close()
+  except:pass
 def tflow(tt,ss,nn,t,w,side):
  l=np.searchsorted(tt,t-w);r=np.searchsorted(tt,t,'right');den=nn[l:r].sum();return float(side*np.sum(ss[l:r]*nn[l:r])/den) if den else 0.
 def feat(q,t,side,tt,ss,nn):
@@ -152,7 +163,10 @@ def execute(df,rm,tt,px,lat=300):
 def main():
  ev=pd.read_csv('events_1h.csv');ev['cutoff']=ev.decision_ms+CUT
  for a,b in [('leader','leader_score_x1e4'),('f250','flow250_x1e4'),('f1','flow1s_x1e4'),('f3','flow3s_x1e4'),('ci','count_imb1s_x1e4'),('mx','max_trade_share1s_x1e4')]:ev[a]=ev[b]/1e4
- ob=D/'ob.parquet';tr=D/'tr.csv.gz';dl(OB,ob);dl(TR,tr)
+ ob=D/'book.csv.gz';tr=D/'tr.csv.gz'
+ if not ob.exists():dl(L2URL,ob)
+ if sha(ob)!=L2SHA:raise RuntimeError('L2 sha mismatch')
+ dl(TR,tr)
  if sha(tr)!=TRSHA:raise RuntimeError('trade sha mismatch')
  tt,px,ss,nn=trades(tr);F,q=capture(ob,ev,tt,ss,nn)
  C=[];X=[];Y=[]
